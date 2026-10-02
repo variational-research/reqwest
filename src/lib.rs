@@ -361,6 +361,8 @@ if_hyper! {
     pub mod cookie;
     pub mod dns;
     mod proxy;
+    mod proxy_connect;
+    pub use self::proxy_connect::{ProxyConnectResponse, ProxyConnectBodyCapture};
     pub mod redirect;
     #[cfg(feature = "__tls")]
     pub mod tls;

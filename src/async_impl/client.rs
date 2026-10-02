@@ -105,6 +105,7 @@ struct Config {
     tls_sni: bool,
     connect_timeout: Option<Duration>,
     connection_verbose: bool,
+    proxy_connect_diagnostics: bool,
     pool_idle_timeout: Option<Duration>,
     pool_max_idle_per_host: usize,
     tcp_keepalive: Option<Duration>,
@@ -207,6 +208,7 @@ impl ClientBuilder {
                 tls_sni: true,
                 connect_timeout: None,
                 connection_verbose: false,
+                proxy_connect_diagnostics: false,
                 pool_idle_timeout: Some(Duration::from_secs(90)),
                 pool_max_idle_per_host: usize::MAX,
                 // TODO: Re-enable default duration once hyper's HttpConnector is fixed
@@ -729,6 +731,7 @@ impl ClientBuilder {
 
         connector_builder.set_timeout(config.connect_timeout);
         connector_builder.set_verbose(config.connection_verbose);
+        connector_builder.set_proxy_connect_diagnostics(config.proxy_connect_diagnostics);
         connector_builder.set_keepalive(config.tcp_keepalive);
 
         let mut builder =
@@ -1176,6 +1179,17 @@ impl ClientBuilder {
     /// a tokio timer enabled.
     pub fn connect_timeout(mut self, timeout: Duration) -> ClientBuilder {
         self.config.connect_timeout = Some(timeout);
+        self
+    }
+
+    /// Capture bounded HTTP proxy CONNECT responses (disabled by default).
+    ///
+    /// Rejections are available through [`crate::Error::proxy_connect_response`].
+    /// Successful metadata is available in [`crate::Response::extensions`].
+    /// Error bodies are raw, capped at 1KiB, and read for at most 100ms within
+    /// the existing connection timeout. Credentials and bodies are not logged.
+    pub fn proxy_connect_diagnostics(mut self, enabled: bool) -> ClientBuilder {
+        self.config.proxy_connect_diagnostics = enabled;
         self
     }
 

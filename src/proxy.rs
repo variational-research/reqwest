@@ -65,6 +65,7 @@ use system_configuration::{
 pub struct Proxy {
     intercept: Intercept,
     no_proxy: Option<NoProxy>,
+    connect_headers: Option<(String, http::HeaderMap)>,
 }
 
 /// Represents a possible matching entry for an IP address
@@ -287,6 +288,7 @@ impl Proxy {
         Proxy {
             intercept,
             no_proxy: None,
+            connect_headers: None,
         }
     }
 
@@ -325,6 +327,53 @@ impl Proxy {
     pub fn custom_http_auth(mut self, header_value: HeaderValue) -> Proxy {
         self.intercept.set_custom_http_auth(header_value);
         self
+    }
+
+    /// Set headers sent only on CONNECT to this exact destination hostname.
+    ///
+    /// These headers are never sent to an origin or another destination. The
+    /// hostname must not contain a scheme, port, credentials or path. Host,
+    /// authentication and connection/framing headers cannot be overridden.
+    pub fn connect_headers_for_host(
+        mut self,
+        host: impl Into<String>,
+        headers: http::HeaderMap,
+    ) -> crate::Result<Self> {
+        let host = host.into();
+        let parsed = url::Host::parse(&host).map_err(crate::error::builder)?;
+        let normalized = parsed.to_string().to_ascii_lowercase();
+        if host.is_empty() || host.contains(['/', '@', '?', '#']) {
+            return Err(crate::error::builder(
+                "invalid CONNECT destination hostname",
+            ));
+        }
+        for name in headers.keys() {
+            if matches!(
+                name.as_str(),
+                "host"
+                    | "proxy-authorization"
+                    | "authorization"
+                    | "connection"
+                    | "proxy-connection"
+                    | "content-length"
+                    | "transfer-encoding"
+                    | "te"
+                    | "trailer"
+                    | "upgrade"
+                    | "keep-alive"
+            ) {
+                return Err(crate::error::builder("reserved CONNECT header"));
+            }
+        }
+        self.connect_headers = Some((normalized, headers));
+        Ok(self)
+    }
+
+    pub(crate) fn connect_headers(&self, uri: &Uri) -> Option<http::HeaderMap> {
+        let (host, headers) = self.connect_headers.as_ref()?;
+        uri.host()
+            .filter(|value| value.eq_ignore_ascii_case(host))
+            .map(|_| headers.clone())
     }
 
     /// Adds a `No Proxy` exclusion list to this Proxy
@@ -1679,6 +1728,7 @@ mod tests {
                 host: http::uri::Authority::from_static("authority"),
             }),
             no_proxy: None,
+            connect_headers: None,
         };
         assert!(http_proxy_with_auth.maybe_has_http_auth());
         assert_eq!(
@@ -1692,6 +1742,7 @@ mod tests {
                 host: http::uri::Authority::from_static("authority"),
             }),
             no_proxy: None,
+            connect_headers: None,
         };
         assert!(!http_proxy_without_auth.maybe_has_http_auth());
         assert_eq!(
@@ -1705,6 +1756,7 @@ mod tests {
                 host: http::uri::Authority::from_static("authority"),
             }),
             no_proxy: None,
+            connect_headers: None,
         };
         assert!(https_proxy_with_auth.maybe_has_http_auth());
         assert_eq!(
@@ -1718,6 +1770,7 @@ mod tests {
                 host: http::uri::Authority::from_static("authority"),
             }),
             no_proxy: None,
+            connect_headers: None,
         };
         assert!(all_http_proxy_with_auth.maybe_has_http_auth());
         assert_eq!(
@@ -1731,6 +1784,7 @@ mod tests {
                 host: http::uri::Authority::from_static("authority"),
             }),
             no_proxy: None,
+            connect_headers: None,
         };
         assert!(all_https_proxy_with_auth.maybe_has_http_auth());
         assert_eq!(
@@ -1744,6 +1798,7 @@ mod tests {
                 host: http::uri::Authority::from_static("authority"),
             }),
             no_proxy: None,
+            connect_headers: None,
         };
         assert!(!all_https_proxy_without_auth.maybe_has_http_auth());
         assert_eq!(
@@ -1764,6 +1819,7 @@ mod tests {
                 m
             })),
             no_proxy: None,
+            connect_headers: None,
         };
         assert!(system_http_proxy_with_auth.maybe_has_http_auth());
         assert_eq!(
@@ -1784,6 +1840,7 @@ mod tests {
                 m
             })),
             no_proxy: None,
+            connect_headers: None,
         };
         assert!(!system_https_proxy_with_auth.maybe_has_http_auth());
         assert_eq!(

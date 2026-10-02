@@ -139,6 +139,19 @@ impl Error {
         false
     }
 
+    /// Return captured proxy CONNECT rejection details, when diagnostics are enabled.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn proxy_connect_response(&self) -> Option<&crate::ProxyConnectResponse> {
+        let mut source = self.source();
+        while let Some(error) = source {
+            if let Some(rejection) = error.downcast_ref::<crate::proxy_connect::Rejection>() {
+                return Some(&rejection.0);
+            }
+            source = error.source();
+        }
+        None
+    }
+
     /// Returns true if the error is related to the request or response body
     pub fn is_body(&self) -> bool {
         matches!(self.inner.kind, Kind::Body)

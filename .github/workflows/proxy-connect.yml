@@ -1,0 +1,31 @@
+name: Proxy CONNECT
+
+on:
+  push:
+    branches: [ryan/proxy-connect-diagnostics]
+  pull_request:
+    branches: [ryan/proxy-connect-diagnostics]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: proxy-connect-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  proxy-connect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-01-22
+      - name: Rustls CONNECT tests
+        run: cargo test --locked --lib --no-default-features --features json,rustls-tls,gzip proxy_connect
+      - name: Native TLS and SOCKS CONNECT tests
+        run: cargo test --locked --lib --no-default-features --features native-tls,socks proxy_connect
+      - name: No-TLS compile check
+        run: cargo check --locked --lib --no-default-features
